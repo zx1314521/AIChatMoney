@@ -1,0 +1,1 @@
+# MoneyRobot package
