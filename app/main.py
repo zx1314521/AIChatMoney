@@ -39,6 +39,7 @@ def health() -> dict[str, str]:
 
 @app.post("/feishu/events")
 def feishu_events(payload: dict[str, Any]) -> dict[str, Any]:
+    print("收到事件:", payload)
     # 飞书 URL 校验
     if payload.get("type") == "url_verification":
         return {"challenge": payload.get("challenge")}
