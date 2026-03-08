@@ -76,6 +76,7 @@ def feishu_events(payload: dict[str, Any]) -> dict[str, Any]:
     event = payload.get("event") or {}
     sender_open_id, chat_id, message_id, text = feishu.parse_text_message(event)
     text = _strip_mention_keys(event, text)
+    print(f"解析消息 message_id={message_id} chat_id={chat_id} sender_open_id={sender_open_id} text={text!r}")
     if not message_id:
         return {"ok": True}
 
@@ -83,10 +84,28 @@ def feishu_events(payload: dict[str, Any]) -> dict[str, Any]:
         upsert_user_binding(sender_open_id, chat_id)
 
     reply = bot.handle_text(text)
+    print(f"准备回复 message_id={message_id} reply_preview={reply[:80]!r}")
     try:
         feishu.reply_text(message_id, reply)
+        print(f"reply_text 成功 message_id={message_id}")
     except Exception as e:
-        # 回复失败时返回错误便于飞书重试
+        print(f"reply_text 失败 message_id={message_id} error={e}")
+        # reply 失败时回退为普通发消息，便于定位 reply 接口问题
+        if chat_id:
+            try:
+                feishu.send_text(reply, receive_id_type="chat_id", receive_id=chat_id)
+                print(f"send_text(chat_id) 成功 chat_id={chat_id}")
+                return {"ok": True, "fallback": "chat_id"}
+            except Exception as send_err:
+                print(f"send_text(chat_id) 失败 chat_id={chat_id} error={send_err}")
+        if sender_open_id:
+            try:
+                feishu.send_text(reply, receive_id_type="open_id", receive_id=sender_open_id)
+                print(f"send_text(open_id) 成功 open_id={sender_open_id}")
+                return {"ok": True, "fallback": "open_id"}
+            except Exception as send_err:
+                print(f"send_text(open_id) 失败 open_id={sender_open_id} error={send_err}")
+        # 彻底失败时返回错误便于飞书重试
         return {"ok": False, "error": str(e)}
     return {"ok": True}
 
