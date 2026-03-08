@@ -32,6 +32,26 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="MoneyRobot", version="0.1.0", lifespan=lifespan)
 
 
+def _event_token(payload: dict[str, Any]) -> str:
+    if payload.get("token"):
+        return str(payload.get("token"))
+    header = payload.get("header") or {}
+    return str(header.get("token") or "")
+
+
+def _strip_mention_keys(event: dict[str, Any], text: str | None) -> str | None:
+    if text is None:
+        return None
+    message = event.get("message") or {}
+    mentions = message.get("mentions") or []
+    cleaned = text
+    for mention in mentions:
+        key = mention.get("key")
+        if key:
+            cleaned = cleaned.replace(str(key), " ")
+    return " ".join(cleaned.split())
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -45,7 +65,7 @@ def feishu_events(payload: dict[str, Any]) -> dict[str, Any]:
         return {"challenge": payload.get("challenge")}
 
     if settings.feishu_verification_token:
-        token = payload.get("token")
+        token = _event_token(payload)
         if token != settings.feishu_verification_token:
             return {"ok": False, "error": "invalid verification token"}
 
@@ -55,6 +75,7 @@ def feishu_events(payload: dict[str, Any]) -> dict[str, Any]:
 
     event = payload.get("event") or {}
     sender_open_id, chat_id, message_id, text = feishu.parse_text_message(event)
+    text = _strip_mention_keys(event, text)
     if not message_id:
         return {"ok": True}
 
